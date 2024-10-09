@@ -9,13 +9,13 @@ class Config:
     """Configuration class to store paths and settings."""
 
     def __init__(self):
-        self.browser_path = r"C:\Program Files\Google\Chrome\Application\chrome.exe" # Change to your own chrome.exe path
+        self.browser_path = r"C:\Program Files\Google\Chrome\Application\chrome.exe" # Change to your own chrome.exe path if it's different
         self.chrome_user_data_dir = r"C:\Users\this_user\AppData\Local\Google\Chrome\User Data" # Change to your own Chrome's User Data dir path
-        self.profile_directory_name = "Profile 6" # Change to your profile directory name
+        self.profile_directory_name = "Profile 6" # Change to your chosen profile directory's name
         self.this_script_file_path = Path(__file__)
         self.this_script_directory = self.this_script_file_path.parent
         self.output_path = self.this_script_directory # update output_path with your chosen output path in string format
-        self.json_output_dir = self.output_path / "scraped_data"
+        self.json_output_dir = self.output_path / "scraped_data" # One json file per scraped deal will be stored there
         self.state_file = self.this_script_directory / "state.json"
         self.saved_deals_page = "https://www.pepper.pl/profile/this_user/saved-deals" # Change the url to your Saved Deals page
 
@@ -34,7 +34,10 @@ class StateManager:
         return {}
 
     def get_comment_count(self):
-        """Retrieves the comment count for each deal from the state file."""
+        """
+        Retrieves the comment count for each deal from the state file
+        to compare it with the current comment count of a deal that is being scraped.
+        """
         if self.state_file.exists():
             try:
                 with open(self.state_file, "r") as f:
@@ -47,7 +50,7 @@ class StateManager:
             return self.create_state_file()
 
     def save_data_to_state_file(self, comments_count):
-        """Updates the state file with current comment count."""
+        """Updates the state file with current comment count bound to a deal's url."""
         with open(self.state_file, "w") as f:
             json.dump(comments_count, f)
         print(f"Saving the new state file at '{self.state_file}'.")
@@ -209,9 +212,12 @@ class PepperScraper:
                 else:
                     comment_date = time_elements.nth(0).text_content()
                     comment_date_list = comment_date.split()
+                    # If a comment has been recently added, it's not going to have a proper datetime format but rather minutes and hours stated
                     if 'min' in comment_date_list or 'g' in comment_date_list:
+                        # In this case, we fetch the current datetime
                         comment_date = DateHelper.get_date()
                     else:
+                        # Otherwise, the format is only date and month, so a year needs to be added
                         comment_date = comment_date + ' ' + DateHelper.get_date('year')
 
                 print(f"Comment date: {comment_date}")
@@ -335,6 +341,8 @@ class PepperScraper:
 
             saved_deals = self.get_saved_deals(page)
 
+            # A deal gets scraped if it hasn't been scraped before, i.e is not listed in the state.json file
+            # and if new comments appeared from the last time it was scraped
             for deal_url, deal_data in saved_deals.items():
                 if not deal_data.get("Comment count", 0):
                     print("Omitting a deal since there are no comments.")
@@ -355,6 +363,7 @@ class PepperScraper:
 
                 json_file_path = self.config.json_output_dir / filename
                 DataSaver.save_data_to_json(deal_data, json_file_path)
+
                 comments_count[deal_url] = deal_data["Comment count"]
 
                 self.state_manager.save_data_to_state_file(comments_count)
